@@ -1,6 +1,8 @@
+streamlit
 langchain
 langchain-community
-langchain-openai
+langchain-text-splitters
+langchain-huggingface
 faiss-cpu
 pypdf
 python-dotenv
