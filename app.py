@@ -1,5 +1,12 @@
-import os
+from utils.llm import load_llm
+from utils.llm import generate_answer
+from utils.retriever import search
+from utils.vector_store import create_vector_store
+from utils.chunker import create_chunks
+from utils.embedding import load_embedding_model
+from utils.save_file import save_file
 import streamlit as st
+import os
 
 from utils.loader import load_pdf
 
@@ -23,8 +30,7 @@ if uploaded_file:
 
     file_path = os.path.join("data", uploaded_file.name)
 
-    with open(file_path, "wb") as f:
-        f.write(uploaded_file.getbuffer())
+    save_file(file_path, uploaded_file)
 
     st.success("✅ PDF uploaded successfully.")
 
@@ -42,3 +48,61 @@ if uploaded_file:
 
     with st.expander("Preview First Page"):
         st.write(documents[0].page_content)
+
+    #chunk setting
+    chunks = st.slider(
+        "Chunk Size",
+         min_value=100,
+          max_value=500,
+          value=200,
+          step=10
+    )
+
+    chunk_overlap = st.slider(
+        "Chunk Overlap",
+        min_value=0,
+        max_value=100,
+        value=20,
+        step=10
+    )
+
+    chunks = create_chunks(
+        documents,
+        chunks,
+        chunk_overlap)
+
+    with col2:
+        st.metric("Chunks", len(chunks))
+
+    with st.expander("📄 First Chunk"):
+        st.write(chunks[0].page_content)
+    
+     # Embedding Model
+    embedding_model = load_embedding_model()
+
+    # Create vector store
+    vector_store = create_vector_store(chunks, embedding_model)
+
+    st.success("✅ Vector Store Created")
+
+    st.divider()
+
+    query = st.text_input("Ask a question about your PDF")
+
+    results = search(vector_store, query)
+
+    context = ""
+
+    for doc in results:
+        context += doc.page_content + "\n\n"
+
+    llm = load_llm()
+
+    llm_response = generate_answer(llm, context, query)
+
+    st.subheader("Answer")
+
+    st.write(llm_response)
+
+
+    
