@@ -1,14 +1,14 @@
-from utils.llm import load_llm
-from utils.llm import generate_answer
-from utils.retriever import search
-from utils.vector_store import create_vector_store
+import os
+import streamlit as st
+
+from utils.save_file import save_file
+from utils.loader import load_pdf
 from utils.chunker import create_chunks
 from utils.embedding import load_embedding_model
-from utils.save_file import save_file
-import streamlit as st
-import os
+from utils.vector_store import create_vector_store
+from utils.retriever import search
+from utils.llm import load_llm, generate_answer
 
-from utils.loader import load_pdf
 
 st.set_page_config(
     page_title="RAG Visualizer",
@@ -26,6 +26,7 @@ uploaded_file = st.file_uploader(
 
 if uploaded_file:
 
+    # Save PDF
     os.makedirs("data", exist_ok=True)
 
     file_path = os.path.join("data", uploaded_file.name)
@@ -34,28 +35,31 @@ if uploaded_file:
 
     st.success("✅ PDF uploaded successfully.")
 
+    # Load PDF
     documents = load_pdf(file_path)
 
-    st.subheader("Document Information")
+    st.subheader("📄 Document Information")
 
     col1, col2 = st.columns(2)
 
     with col1:
-        st.metric("Total Pages", len(documents))
+        st.metric("Pages", len(documents))
 
     with col2:
-        st.metric("File Name", uploaded_file.name)
+        st.metric("File", uploaded_file.name)
 
     with st.expander("Preview First Page"):
         st.write(documents[0].page_content)
 
-    #chunk setting
-    chunks = st.slider(
+    st.divider()
+
+    # Chunk Settings
+    chunk_size = st.slider(
         "Chunk Size",
-         min_value=100,
-          max_value=500,
-          value=200,
-          step=10
+        min_value=100,
+        max_value=500,
+        value=200,
+        step=10
     )
 
     chunk_overlap = st.slider(
@@ -66,43 +70,68 @@ if uploaded_file:
         step=10
     )
 
+    # Create Chunks
     chunks = create_chunks(
         documents,
-        chunks,
-        chunk_overlap)
+        chunk_size,
+        chunk_overlap
+    )
 
-    with col2:
-        st.metric("Chunks", len(chunks))
+    st.metric("Total Chunks", len(chunks))
 
-    with st.expander("📄 First Chunk"):
+    with st.expander("First Chunk"):
         st.write(chunks[0].page_content)
-    
-     # Embedding Model
-    embedding_model = load_embedding_model()
-
-    # Create vector store
-    vector_store = create_vector_store(chunks, embedding_model)
-
-    st.success("✅ Vector Store Created")
 
     st.divider()
 
-    query = st.text_input("Ask a question about your PDF")
+    # Embedding Model
+    embedding_model = load_embedding_model()
 
-    results = search(vector_store, query)
+    # Vector Store
+    vector_store = create_vector_store(
+        chunks,
+        embedding_model
+    )
 
-    context = ""
+    st.success("✅ Vector Store Ready")
 
-    for doc in results:
-        context += doc.page_content + "\n\n"
+    st.divider()
 
-    llm = load_llm()
+    # User Query
+    query = st.text_input(
+        "Ask a question about your PDF"
+    )
 
-    llm_response = generate_answer(llm, context, query)
+    if query.strip():
 
-    st.subheader("Answer")
+        with st.spinner("Searching relevant chunks..."):
 
-    st.write(llm_response)
+            results = search(
+                vector_store,
+                query
+            )
 
+        st.subheader("📚 Retrieved Chunks")
 
-    
+        context = ""
+
+        for i, doc in enumerate(results, start=1):
+
+            context += doc.page_content + "\n\n"
+
+            with st.expander(f"Chunk {i}"):
+                st.write(doc.page_content)
+
+        with st.spinner("Generating Answer..."):
+
+            llm = load_llm()
+
+            answer = generate_answer(
+                llm,
+                context,
+                query
+            )
+
+        st.subheader("🤖 Final Answer")
+
+        st.write(answer)
